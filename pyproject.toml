@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "evals-server"
+version = "0.1.0"
+description = "Standalone MCP server for agent evaluation using Strands Evals SDK"
+requires-python = ">=3.11"
+
+dependencies = [
+    "fastmcp>=2.14.4",
+    "mcp>=1.0.0",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+    "strands-agents>=1.23.0",
+    "strands-agents-evals>=0.1.0",
+]
+
+[project.optional-dependencies]
+tools = [
+    "strands-agents-tools>=0.2.19",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+evals-server = "factory.evals.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/factory"]
