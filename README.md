@@ -1,82 +1,42 @@
 # Evals Server
 
-Standalone MCP server for agent evaluation, powered by the
-[Strands Evals SDK](https://strandsagents.com/latest/documentation/docs/user-guide/evals-sdk/quickstart/).
+Standalone MCP server for agent evaluation and benchmarking, powered by the [Strands Evals SDK](https://github.com/strands-agents/strands-agents-evals).
 
-## Install
+## Features
+
+- **12 LLMAJ Evaluators** - output, helpfulness, faithfulness, trajectory, goal_success, interactions, tool_selection, tool_parameter, coherence, conciseness, harmfulness, response_relevance
+- **Experiment Management** - create, save, load, and run evaluation suites
+- **ActorSimulator** - multi-turn conversation simulation with synthetic users
+- **Experiment Serialization** - save/load experiment configs as JSON
+- **Auto-Generated Test Cases** - generate test cases from agent context descriptions
+- **UI Exploration** - browser-based evaluation with Chrome DevTools
+
+## Quick Start
 
 ```bash
-git clone https://github.com/bannff/evals-server.git
-cd evals-server
 pip install -e .
+evals-server
 ```
 
-## Setup
+Or: `python -m factory.evals.server`
 
-1. Configure AWS credentials for Bedrock (default provider):
-
-```bash
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
-# or: aws configure
-```
-
-2. Enable model access in the
-   [Bedrock console](https://console.aws.amazon.com/bedrock)
-   for Claude Sonnet (or your preferred model).
-
-## Usage
-
-Add to your IDE's `mcp.json`:
+### MCP Config
 
 ```json
 {
   "mcpServers": {
     "evals": {
-      "command": "evals-server",
-      "args": []
+      "command": "python",
+      "args": ["-m", "factory.evals.server"],
+      "cwd": "/path/to/evals-server",
+      "env": { "AWS_REGION": "us-east-1" }
     }
   }
 }
 ```
 
-## Available MCP Tools
+## Requirements
 
-| Tool | Description |
-|------|-------------|
-| `evals_create_suite` | Create an evaluation suite with test cases |
-| `evals_add_case` | Add a test case to a suite |
-| `evals_list_suites` | List all suites |
-| `evals_get_suite` | Get suite details |
-| `evals_list_evaluators` | List available LLMAJ evaluators |
-| `evals_run_experiment` | Run experiment with evaluators against an agent |
-| `evals_generate_experiment` | Auto-generate test cases from context |
-| `evals_list_runs` | List evaluation runs |
-| `evals_get_run` | Get run details |
-
-## Quick Example
-
-Once connected via MCP, an agent can:
-
-```
-# 1. List available evaluators
-evals_list_evaluators()
-
-# 2. Run an experiment
-evals_run_experiment(
-    cases=[
-        {"name": "math", "input": {"query": "What is 2+2?"}, "expected_output": {"output": "4"}},
-        {"name": "capital", "input": {"query": "Capital of France?"}, "expected_output": {"output": "Paris"}}
-    ],
-    evaluator_names=["output", "helpfulness"],
-    model_id="us.anthropic.claude-sonnet-4-20250514",
-    system_prompt="You are a helpful assistant."
-)
-
-# 3. Or auto-generate test cases
-evals_generate_experiment(
-    context="Agent with calculator and search tools",
-    task_description="Math and research assistant",
-    num_cases=10
-)
-```
+- Python 3.11+
+- AWS credentials for Amazon Bedrock
+- Default model: `us.anthropic.claude-sonnet-4-20250514-v1:0`
