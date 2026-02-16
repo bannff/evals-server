@@ -9,7 +9,7 @@ Report findings from UI exploration to various outputs:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Protocol
 from pathlib import Path
@@ -39,7 +39,7 @@ class UIFinding:
     route: str
     details: dict[str, Any] = field(default_factory=dict)
     screenshot_path: str | None = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -101,7 +101,7 @@ class FileReporter:
             data = {
                 "findings": [f.to_dict() for f in findings],
                 "summary": self._summary(findings),
-                "generated_at": datetime.utcnow().isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
             }
             self.output_path.write_text(json.dumps(data, indent=2))
         else:
@@ -166,12 +166,12 @@ class ConsoleReporter:
     def report_single(self, finding: UIFinding) -> None:
         """Print single finding."""
         icon = {
-            FindingSeverity.CRITICAL: "\U0001f534",
-            FindingSeverity.HIGH: "\U0001f7e0",
-            FindingSeverity.MEDIUM: "\U0001f7e1",
-            FindingSeverity.LOW: "\U0001f535",
-            FindingSeverity.INFO: "\u26aa",
-        }.get(finding.severity, "\u26aa")
+            FindingSeverity.CRITICAL: "🔴",
+            FindingSeverity.HIGH: "🟠",
+            FindingSeverity.MEDIUM: "🟡",
+            FindingSeverity.LOW: "🔵",
+            FindingSeverity.INFO: "⚪",
+        }.get(finding.severity, "⚪")
 
         print(f"{icon} [{finding.severity.value.upper()}] {finding.title}")
         print(f"   Route: {finding.route}")

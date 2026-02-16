@@ -66,6 +66,24 @@ class EvalsRuntime:
             context, task_description, num_cases, evaluator_name,
         )
 
+    def run_simulation(
+        self, config: ExperimentConfig, max_turns: int = 10,
+    ) -> ExperimentReport:
+        """Run multi-turn simulation via ActorSimulator."""
+        return self.get_strands_runner().run_simulation(config, max_turns)
+
+    def save_experiment(self, config: ExperimentConfig, filename: str) -> dict:
+        """Save experiment to JSON via Strands serialization."""
+        return self.get_strands_runner().save_experiment(config, filename)
+
+    def load_experiment(self, filename: str) -> ExperimentConfig:
+        """Load experiment from JSON via Strands deserialization."""
+        return self.get_strands_runner().load_experiment(filename)
+
+    def list_saved_experiments(self) -> list[dict]:
+        """List saved experiment files."""
+        return self.get_strands_runner().list_saved_experiments()
+
     def list_evaluators(self) -> list[dict[str, Any]]:
         """List available evaluators."""
         from .adapters.strands_adapter import get_available_evaluators

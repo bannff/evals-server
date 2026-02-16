@@ -36,7 +36,7 @@ def register(
         cases: list[dict[str, Any]],
         evaluator_names: list[str] | None = None,
         rubric: str = "",
-        model_id: str = "us.anthropic.claude-sonnet-4-20250514",
+        model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0",
         system_prompt: str = "You are a helpful assistant.",
         temperature: float = 0.1,
         experiment_name: str = "experiment",

@@ -1,4 +1,12 @@
-"""Evals MCP server - exposes evaluation operations via FastMCP."""
+"""Evals MCP server - exposes evaluation operations via FastMCP.
+
+This server registers:
+- Deterministic tools (contract tools, queries)
+- Operational tools (suite management)
+- Resources (schemas, docs, live data)
+- Prompts (guided workflows)
+- UI Explorer tools (agentic UI testing)
+"""
 
 from __future__ import annotations
 
@@ -9,16 +17,25 @@ from fastmcp import FastMCP
 from .runtime.runtime import get_runtime, EvalsRuntime
 from .mcp import deterministic, operational, resources, prompts
 from .mcp import ui_scenario_tools, ui_explorer_tools, experiment_tools
+from .mcp import simulation_tools, serialization_tools
 
 
 def create_mcp_server(runtime: EvalsRuntime | None = None) -> FastMCP:
-    """Create MCP server for evals brick."""
+    """Create MCP server for evals brick.
+
+    Args:
+        runtime: Optional pre-configured EvalsRuntime. Uses default if not provided.
+
+    Returns:
+        Configured FastMCP server.
+    """
     runtime = runtime or get_runtime()
     mcp = FastMCP("factory-evals")
 
     def _get_runtime() -> EvalsRuntime:
         return runtime
 
+    # Register all MCP primitives
     deterministic.register(mcp, _get_runtime)
     operational.register(mcp, _get_runtime)
     resources.register(mcp, _get_runtime)
@@ -26,10 +43,13 @@ def create_mcp_server(runtime: EvalsRuntime | None = None) -> FastMCP:
     ui_scenario_tools.register(mcp, _get_runtime)
     ui_explorer_tools.register(mcp, _get_runtime)
     experiment_tools.register(mcp, _get_runtime)
+    simulation_tools.register(mcp, _get_runtime)
+    serialization_tools.register(mcp, _get_runtime)
 
     return mcp
 
 
+# MCP Contract Functions
 def get_capabilities() -> dict[str, Any]:
     """Return machine-readable capabilities for evals brick."""
     return {
@@ -38,19 +58,26 @@ def get_capabilities() -> dict[str, Any]:
         "backends": ["strands", "custom", "ui_explorer"],
         "features": [
             "benchmark_suites",
+            "eval_runs",
+            "metrics_collection",
+            "result_comparison",
+            "ui_exploration",
+            "chrome_devtools_integration",
             "strands_experiments",
             "llm_as_judge_evaluators",
             "experiment_generation",
             "declarative_agent_config",
+            "actor_simulation",
+            "experiment_serialization",
         ],
     }
 
 
 def health_check() -> dict[str, Any]:
-    """Fast readiness probe."""
+    """Fast readiness probe for evals brick."""
     try:
         runtime = get_runtime()
-        return {"healthy": True}
+        return {"healthy": True, "suites": len(runtime.suites)}
     except Exception as e:
         return {"healthy": False, "error": str(e)}
 
@@ -60,13 +87,27 @@ def describe_config_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {
-            "adapter": {"type": "string", "enum": ["strands", "custom"]},
-            "model_id": {"type": "string"},
-            "system_prompt": {"type": "string"},
+            "adapter": {
+                "type": "string",
+                "enum": ["strands", "custom"],
+            },
+            "output_dir": {
+                "type": "string",
+                "description": "Results output directory",
+            },
+            "model_id": {
+                "type": "string",
+                "description": "Bedrock model ID for agent under test",
+            },
+            "system_prompt": {
+                "type": "string",
+                "description": "System prompt for agent under test",
+            },
         },
     }
 
 
+# Module-level server for direct execution
 mcp = create_mcp_server()
 
 

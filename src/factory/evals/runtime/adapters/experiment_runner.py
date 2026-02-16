@@ -1,77 +1,20 @@
-"""Strands Evals SDK experiment runner.
+"""Strands Evals SDK experiment orchestration.
 
-Bridges our EvalCase/ExperimentConfig types to the Strands Evals SDK
-Case/Experiment/Evaluator types. Handles agent construction from
-declarative AgentConfig.
+Converts EvalCase/ExperimentConfig to Strands SDK types, runs
+experiments via Experiment.run_evaluations, and generates
+experiment configs from context.
 """
-
 from __future__ import annotations
 
 import asyncio
 import logging
 from typing import Any
 
-from ..ports import (
-    EvalCase,
-    AgentConfig,
-    ExperimentConfig,
-    ExperimentReport,
-)
+from ..ports import EvalCase, ExperimentConfig, ExperimentReport
+from .evaluator_factory import build_evaluators
+from .agent_task import build_agent_fn
 
 logger = logging.getLogger(__name__)
-
-
-def _build_evaluators(names: list[str], rubric: str = "") -> list[Any]:
-    """Build Strands evaluator instances from names."""
-    from strands_evals.evaluators import (
-        OutputEvaluator,
-        HelpfulnessEvaluator,
-        FaithfulnessEvaluator,
-        TrajectoryEvaluator,
-        GoalSuccessRateEvaluator,
-    )
-
-    mapping: dict[str, Any] = {
-        "output": lambda: OutputEvaluator(rubric=rubric or _default_rubric()),
-        "helpfulness": HelpfulnessEvaluator,
-        "faithfulness": FaithfulnessEvaluator,
-        "trajectory": lambda: TrajectoryEvaluator(rubric=rubric or _default_rubric()),
-        "goal_success": GoalSuccessRateEvaluator,
-    }
-
-    evaluators = []
-    for name in names:
-        factory = mapping.get(name)
-        if factory:
-            evaluators.append(factory())
-        else:
-            logger.warning("Unknown evaluator: %s, skipping", name)
-    return evaluators or [OutputEvaluator(rubric=rubric or _default_rubric())]
-
-
-def _default_rubric() -> str:
-    return (
-        "Score 1.0 if the response is accurate, complete, and helpful. "
-        "Score 0.5 if partially correct. Score 0.0 if incorrect or unhelpful."
-    )
-
-
-def _build_agent_fn(agent_config: AgentConfig | None):
-    """Build a task function from declarative agent config."""
-    from strands import Agent
-    from strands_evals import Case
-
-    config = agent_config or AgentConfig()
-
-    def task_fn(case: Case) -> str:
-        agent = Agent(
-            system_prompt=config.system_prompt,
-            callback_handler=None,
-        )
-        response = agent(case.input)
-        return str(response)
-
-    return task_fn
 
 
 def _our_cases_to_strands(cases: list[EvalCase]) -> list[Any]:
@@ -80,11 +23,13 @@ def _our_cases_to_strands(cases: list[EvalCase]) -> list[Any]:
 
     strands_cases = []
     for c in cases:
-        input_str = c.input.get("query", c.input.get("input", str(c.input)))
+        raw = c.input
+        input_str = raw if isinstance(raw, str) else raw.get("query", raw.get("input", str(raw)))
         expected = None
         if c.expected:
-            expected = c.expected.get("output", c.expected.get("response", str(c.expected)))
-
+            expected = c.expected.get(
+                "output", c.expected.get("response", str(c.expected)),
+            )
         kwargs: dict[str, Any] = {
             "name": c.name or c.id,
             "input": input_str,
@@ -94,7 +39,6 @@ def _our_cases_to_strands(cases: list[EvalCase]) -> list[Any]:
             kwargs["expected_output"] = expected
         if c.expected_trajectory:
             kwargs["expected_trajectory"] = c.expected_trajectory
-
         strands_cases.append(Case[str, str](**kwargs))
     return strands_cases
 
@@ -104,28 +48,31 @@ def run_strands_experiment(config: ExperimentConfig) -> ExperimentReport:
     from strands_evals import Experiment
 
     strands_cases = _our_cases_to_strands(config.cases)
-    evaluators = _build_evaluators(config.evaluator_names, config.rubric)
-    task_fn = _build_agent_fn(config.agent_config)
+    evaluators = build_evaluators(config.evaluator_names, config.rubric)
+    task_fn = build_agent_fn(config.agent_config, config.evaluator_names)
 
     experiment = Experiment[str, str](
-        cases=strands_cases,
-        evaluators=evaluators,
+        cases=strands_cases, evaluators=evaluators,
     )
-
     reports = experiment.run_evaluations(task_fn)
     report = reports[0] if reports else None
 
-    case_results = []
+    case_results: list[dict[str, Any]] = []
     summary: dict[str, Any] = {}
     if report:
-        for cr in report.case_results:
+        for i, case_rec in enumerate(report.cases):
             case_results.append({
-                "case_name": cr.case.name,
-                "score": cr.evaluation_output.score,
-                "passed": cr.evaluation_output.test_pass,
-                "reason": cr.evaluation_output.reason,
+                "case_name": case_rec.get("name", f"case-{i}"),
+                "score": report.scores[i] if i < len(report.scores) else 0.0,
+                "passed": report.test_passes[i] if i < len(report.test_passes) else False,
+                "reason": report.reasons[i] if i < len(report.reasons) else "",
             })
-        summary = report.get_summary()
+        passes = report.test_passes
+        summary = {
+            "overall_score": report.overall_score,
+            "pass_rate": sum(passes) / len(passes) if passes else 0.0,
+            "total_cases": len(report.cases),
+        }
 
     return ExperimentReport(
         experiment_name=config.name or "experiment",
@@ -145,27 +92,30 @@ def generate_strands_experiment(
     from strands_evals.generators import ExperimentGenerator
     from strands_evals.evaluators import OutputEvaluator, TrajectoryEvaluator
 
-    eval_map = {
-        "output": OutputEvaluator,
-        "trajectory": TrajectoryEvaluator,
-    }
+    eval_map = {"output": OutputEvaluator, "trajectory": TrajectoryEvaluator}
     evaluator_cls = eval_map.get(evaluator_name, OutputEvaluator)
 
     generator = ExperimentGenerator[str, str](
-        input_type=str,
-        output_type=str,
-        include_expected_output=True,
+        input_type=str, output_type=str, include_expected_output=True,
     )
 
     async def _generate():
         return await generator.from_context_async(
-            context=context,
-            task_description=task_description,
-            num_cases=num_cases,
-            evaluator=evaluator_cls,
+            context=context, task_description=task_description,
+            num_cases=num_cases, evaluator=evaluator_cls,
         )
 
-    experiment = asyncio.run(_generate())
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            experiment = pool.submit(asyncio.run, _generate()).result()
+    else:
+        experiment = asyncio.run(_generate())
 
     cases = []
     for i, sc in enumerate(experiment.cases):

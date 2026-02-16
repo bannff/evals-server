@@ -1,10 +1,23 @@
+"""JSON serialization helpers for MCP tool results.
+
+Shared by all bridge modules (api, dashboard, worker) to convert
+non-JSON-serializable types returned by MCP tools into plain dicts.
+"""
+
 from __future__ import annotations
+
 import datetime
 import enum
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+
 def make_serializable(obj: Any) -> Any:
+    """Recursively convert non-JSON-serializable types to plain dicts.
+
+    Handles: dataclasses, Pydantic models, enums, datetime, bytes,
+    sets, frozensets, and nested combinations thereof.
+    """
     if obj is None or isinstance(obj, (bool, int, float, str)):
         return obj
     if isinstance(obj, enum.Enum):

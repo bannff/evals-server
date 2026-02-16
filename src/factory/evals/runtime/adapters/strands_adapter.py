@@ -3,7 +3,6 @@
 Integrates with the Strands Evals SDK (strands-agents-evals) to provide
 LLM-as-a-Judge evaluators, experiment management, and agent execution.
 """
-
 from __future__ import annotations
 
 import logging
@@ -21,17 +20,9 @@ from .evaluator_catalog import get_available_evaluators
 logger = logging.getLogger(__name__)
 
 
-def _check_strands_evals() -> bool:
+def _check_import(module: str) -> bool:
     try:
-        import strands_evals  # noqa: F401
-        return True
-    except ImportError:
-        return False
-
-
-def _check_strands_agents() -> bool:
-    try:
-        import strands  # noqa: F401
+        __import__(module)
         return True
     except ImportError:
         return False
@@ -44,8 +35,8 @@ class StrandsEvalRunner:
         self._suites: dict[str, EvalSuite] = {}
         self._runs: dict[str, EvalRun] = {}
         self._experiments: dict[str, ExperimentReport] = {}
-        self._evals_available = _check_strands_evals()
-        self._agents_available = _check_strands_agents()
+        self._evals_available = _check_import("strands_evals")
+        self._agents_available = _check_import("strands")
 
     # -- EvalRunner protocol (backward compat) --
 
@@ -60,34 +51,26 @@ class StrandsEvalRunner:
         return list(self._suites.values())
 
     def run_suite(
-        self,
-        suite_id: str,
+        self, suite_id: str,
         agent_fn: Callable[[dict[str, Any]], dict[str, Any]],
         scorer_fn: Callable[[EvalCase, dict[str, Any]], EvalResult] | None = None,
     ) -> EvalRun:
         suite = self.get_suite(suite_id)
         if not suite:
             raise ValueError(f"Suite not found: {suite_id}")
-        run = EvalRun(
-            id=str(uuid.uuid4()), suite_id=suite_id,
-            started_at=datetime.now(), status="running",
-        )
+        run = EvalRun(id=str(uuid.uuid4()), suite_id=suite_id,
+                      started_at=datetime.now(), status="running")
         for case in suite.cases:
             start = time.perf_counter()
             try:
                 actual = agent_fn(case.input)
                 dur = (time.perf_counter() - start) * 1000
+                result = scorer_fn(case, actual) if scorer_fn else self._default_scorer(case, actual, dur)
                 if scorer_fn:
-                    result = scorer_fn(case, actual)
                     result.duration_ms = dur
-                else:
-                    result = self._default_scorer(case, actual, dur)
             except Exception as e:
                 dur = (time.perf_counter() - start) * 1000
-                result = EvalResult(
-                    case_id=case.id, passed=False,
-                    score=0.0, error=str(e), duration_ms=dur,
-                )
+                result = EvalResult(case_id=case.id, passed=False, score=0.0, error=str(e), duration_ms=dur)
             run.results.append(result)
         run.completed_at = datetime.now()
         run.status = "completed"
@@ -104,15 +87,32 @@ class StrandsEvalRunner:
         self._experiments[report.experiment_name] = report
         return report
 
-    def generate_experiment(
-        self, context: str, task_description: str,
-        num_cases: int = 5, evaluator_name: str = "output",
-    ) -> ExperimentConfig:
+    def generate_experiment(self, context: str, task_description: str,
+                            num_cases: int = 5, evaluator_name: str = "output") -> ExperimentConfig:
         self._require_evals()
         from .experiment_runner import generate_strands_experiment
-        return generate_strands_experiment(
-            context, task_description, num_cases, evaluator_name,
-        )
+        return generate_strands_experiment(context, task_description, num_cases, evaluator_name)
+
+    def run_simulation(self, config: ExperimentConfig, max_turns: int = 10) -> ExperimentReport:
+        self._require_evals()
+        from .simulator_adapter import run_simulation
+        report = run_simulation(config, max_turns)
+        self._experiments[report.experiment_name] = report
+        return report
+
+    def save_experiment(self, config: ExperimentConfig, filename: str) -> dict:
+        self._require_evals()
+        from .serialization_adapter import save_experiment
+        return save_experiment(config, filename)
+
+    def load_experiment(self, filename: str) -> ExperimentConfig:
+        self._require_evals()
+        from .serialization_adapter import load_experiment
+        return load_experiment(filename)
+
+    def list_saved_experiments(self) -> list[dict]:
+        from .serialization_adapter import list_saved_experiments
+        return list_saved_experiments()
 
     def list_evaluators(self) -> list[dict[str, Any]]:
         return get_available_evaluators()
@@ -151,35 +151,19 @@ class StrandsEvalRunner:
             msg = "strands-agents not installed (agent execution unavailable)"
         return EvalHealth(healthy=True, backend="strands", message=msg)
 
-    # -- Private --
-
     def _require_evals(self) -> None:
         if not self._evals_available:
-            raise RuntimeError(
-                "strands-agents-evals not installed. "
-                "Install with: pip install strands-agents-evals"
-            )
+            raise RuntimeError("strands-agents-evals not installed. pip install strands-agents-evals")
 
-    def _default_scorer(
-        self, case: EvalCase, actual: dict[str, Any], duration_ms: float,
-    ) -> EvalResult:
+    def _default_scorer(self, case: EvalCase, actual: dict[str, Any], dur: float) -> EvalResult:
         if case.expected is None:
-            return EvalResult(
-                case_id=case.id, passed=True, score=1.0,
-                actual=actual, duration_ms=duration_ms,
-            )
+            return EvalResult(case_id=case.id, passed=True, score=1.0, actual=actual, duration_ms=dur)
         passed = actual == case.expected
-        return EvalResult(
-            case_id=case.id, passed=passed,
-            score=1.0 if passed else 0.0,
-            actual=actual, duration_ms=duration_ms,
-        )
+        return EvalResult(case_id=case.id, passed=passed, score=1.0 if passed else 0.0,
+                          actual=actual, duration_ms=dur)
 
     def _build_summary(self, run: EvalRun) -> dict[str, Any]:
         m = self.compute_metrics(run)
-        return {
-            "total": m.total_cases, "passed": m.passed,
-            "failed": m.failed, "pass_rate": m.pass_rate,
-            "avg_score": m.avg_score,
-            "strands_evals_available": self._evals_available,
-        }
+        return {"total": m.total_cases, "passed": m.passed, "failed": m.failed,
+                "pass_rate": m.pass_rate, "avg_score": m.avg_score,
+                "strands_evals_available": self._evals_available}

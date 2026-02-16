@@ -24,7 +24,7 @@ class EvalCase:
     """A single evaluation test case."""
     id: str
     name: str
-    input: dict[str, Any]
+    input: dict[str, Any] | str
     expected: dict[str, Any] | None = None
     expected_trajectory: list[str] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -81,7 +81,7 @@ class EvalMetrics:
 @dataclass
 class AgentConfig:
     """Declarative agent configuration for running evals."""
-    model_id: str = "us.anthropic.claude-sonnet-4-20250514"
+    model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0"
     system_prompt: str = "You are a helpful assistant."
     temperature: float = 0.1
     max_tokens: int = 4096
