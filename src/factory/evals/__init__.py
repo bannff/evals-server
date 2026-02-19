@@ -2,25 +2,11 @@
 
 This brick provides a unified interface for evaluating agents across
 multiple backends (custom, Strands Evals SDK).
-
-Usage:
-    from factory.evals import create_suite, run_suite, EvalCase
-
-    # Create a suite
-    cases = [
-        EvalCase(id="c1", name="Math", input={"q": "2+2"}, expected={"a": "4"}),
-    ]
-    suite = create_suite("math-suite", "Math Tests", cases)
-
-    # Run against an agent
-    def my_agent(input: dict) -> dict:
-        return {"a": str(eval(input["q"]))}
-
-    run = run_suite("math-suite", my_agent)
-    print(f"Pass rate: {run.summary['pass_rate']}")
 """
 
 from .interface import (
+    create_server,
+    Runtime,
     EvalRunner,
     EvalCase,
     EvalResult,
@@ -31,7 +17,6 @@ from .interface import (
     AgentConfig,
     ExperimentConfig,
     ExperimentReport,
-    EvalsRuntime,
     get_runtime,
     reset_runtime,
 )
@@ -46,6 +31,8 @@ from .core import (
 )
 
 __all__ = [
+    "create_server",
+    "Runtime",
     "EvalRunner",
     "EvalCase",
     "EvalResult",
@@ -56,7 +43,6 @@ __all__ = [
     "AgentConfig",
     "ExperimentConfig",
     "ExperimentReport",
-    "EvalsRuntime",
     "get_runtime",
     "reset_runtime",
     "create_suite",
