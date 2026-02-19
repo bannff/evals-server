@@ -30,22 +30,23 @@ def register(
         runtime = get_runtime()
         return {
             "name": "evals",
-            "version": "1.0.0",
+            "version": "2.0.0",
             "backends": runtime.available_backends(),
-            "features": ["suites", "runs", "metrics", "custom_scorers"],
+            "features": [
+                "benchmark_suites", "eval_runs", "metrics_collection",
+                "result_comparison", "strands_experiments",
+                "llm_as_judge_evaluators", "direct_evaluator_invocation",
+                "multi_evaluator_batch", "experiment_generation",
+                "declarative_agent_config", "actor_simulation",
+                "experiment_serialization", "eval_sop_workflow",
+            ],
             "mcp_resources": [
-                "evals://schemas/eval-config",
-                "evals://schemas/eval-result",
-                "evals://docs/overview",
-                "evals://docs/adapters",
-                "evals://runs",
-                "evals://metrics",
+                "evals://schemas/*", "evals://docs/*", "evals://runs",
+                "evals://metrics", "evals://evaluators", "evals://sop/sessions",
             ],
             "mcp_prompts": [
-                "create_eval",
-                "run_eval",
-                "analyze_results",
-                "compare_runs",
+                "create_eval", "run_eval", "analyze_results",
+                "compare_runs", "evaluate_output", "eval_sop",
             ],
         }
 
@@ -88,13 +89,8 @@ def register(
         suite = runner.get_suite(suite_id)
         if not suite:
             return {"found": False}
-        return {
-            "found": True,
-            "id": suite.id,
-            "name": suite.name,
-            "description": suite.description,
-            "case_count": len(suite.cases),
-        }
+        return {"found": True, "id": suite.id, "name": suite.name,
+                "description": suite.description, "case_count": len(suite.cases)}
 
     @mcp.tool()
     @deterministic
@@ -103,13 +99,8 @@ def register(
         runtime = get_runtime()
         runner = runtime.get_runner()
         suites = runner.list_suites()
-        return {
-            "suites": [
-                {"id": s.id, "name": s.name, "case_count": len(s.cases)}
-                for s in suites
-            ],
-            "count": len(suites),
-        }
+        return {"suites": [{"id": s.id, "name": s.name, "case_count": len(s.cases)}
+                for s in suites], "count": len(suites)}
 
     @mcp.tool()
     @deterministic
@@ -120,14 +111,9 @@ def register(
         run = runner.get_run(run_id)
         if not run:
             return {"found": False}
-        return {
-            "found": True,
-            "id": run.id,
-            "suite_id": run.suite_id,
-            "status": run.status,
-            "summary": run.summary,
-            "result_count": len(run.results),
-        }
+        return {"found": True, "id": run.id, "suite_id": run.suite_id,
+                "status": run.status, "summary": run.summary,
+                "result_count": len(run.results)}
 
     @mcp.tool()
     @deterministic
@@ -136,10 +122,5 @@ def register(
         runtime = get_runtime()
         runner = runtime.get_runner()
         runs = runner.list_runs(suite_id)
-        return {
-            "runs": [
-                {"id": r.id, "suite_id": r.suite_id, "status": r.status}
-                for r in runs
-            ],
-            "count": len(runs),
-        }
+        return {"runs": [{"id": r.id, "suite_id": r.suite_id, "status": r.status}
+                for r in runs], "count": len(runs)}
