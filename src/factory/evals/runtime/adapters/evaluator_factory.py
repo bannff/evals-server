@@ -15,12 +15,19 @@ DEFAULT_RUBRIC = (
     "Score 0.5 if partially correct. Score 0.0 if incorrect or unhelpful."
 )
 
-OUTPUT_ONLY = frozenset({"output"})
+OUTPUT_LEVEL_EVALUATORS = frozenset({"output"})
+TRACE_LEVEL_EVALUATORS = frozenset({
+    "helpfulness", "faithfulness", "coherence", "conciseness",
+    "harmfulness", "response_relevance", "tool_selection", "tool_parameter",
+})
+SESSION_LEVEL_EVALUATORS = frozenset({
+    "trajectory", "interactions", "goal_success",
+})
 
 
 def needs_trace(evaluator_names: list[str]) -> bool:
     """True if any evaluator requires trace/session data."""
-    return bool(set(evaluator_names) - OUTPUT_ONLY)
+    return bool(set(evaluator_names) - OUTPUT_LEVEL_EVALUATORS)
 
 
 def build_evaluators(names: list[str], rubric: str = "") -> list[Any]:
